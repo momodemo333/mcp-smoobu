@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.claude/settings.json
+.claude/
+.mcp.json
+_bmad/
+_bmad-output/

@@ -1,0 +1,46 @@
+{
+  "name": "mcp-smoobu",
+  "version": "0.1.0",
+  "description": "MCP server for Smoobu property management API - manage reservations, properties, guests, rates, and messages",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/momodemo333/mcp-smoobu"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mcp-smoobu": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "smoobu",
+    "property-management",
+    "claude",
+    "llm",
+    "model-context-protocol"
+  ],
+  "author": "Morgan Demoulin",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.1.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
