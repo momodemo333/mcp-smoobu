@@ -115,7 +115,7 @@ export async function sendReservationMessage(
 
   const payload: Record<string, unknown> = {
     subject: params.subject,
-    body: params.body,
+    messageBody: params.body,
   };
   if (params.templateId !== undefined) {
     payload.templateId = params.templateId;
@@ -123,7 +123,7 @@ export async function sendReservationMessage(
 
   return client.mutate<Record<string, unknown>>(
     "POST",
-    `/api/reservations/${params.reservationId}/messages`,
+    `/api/reservations/${params.reservationId}/messages/send-message-to-guest`,
     payload,
   );
 }

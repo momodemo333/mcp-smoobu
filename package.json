@@ -1,6 +1,6 @@
 {
   "name": "mcp-smoobu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Smoobu property management API - manage reservations, properties, guests, rates, and messages",
   "repository": {
     "type": "git",
