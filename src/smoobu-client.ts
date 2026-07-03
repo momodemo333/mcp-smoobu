@@ -1,3 +1,4 @@
+import { createHmac, createHash, randomUUID } from "node:crypto";
 import { createError, normalizeApiError, type NormalizedError } from "./errors.js";
 
 const DEFAULT_BASE_URL = "https://login.smoobu.com";
@@ -6,7 +7,9 @@ const TIMEOUT_MS = 30_000;
 export class SmoobuClient {
   private baseUrl: string;
   private apiKey: string;
+  private apiSecret?: string;
   private version: string;
+  private allowWrites: boolean;
 
   constructor() {
     const apiKey = process.env.SMOOBU_API_KEY;
@@ -17,10 +20,12 @@ export class SmoobuClient {
       );
     }
     this.apiKey = apiKey;
+    this.apiSecret = process.env.SMOOBU_API_SECRET;
     this.baseUrl = (
       process.env.SMOOBU_API_URL || DEFAULT_BASE_URL
     ).replace(/\/$/, "");
     this.version = process.env.npm_package_version || "0.1.0";
+    this.allowWrites = process.env.SMOOBU_ALLOW_WRITES === "true";
   }
 
   async request<T>(
@@ -48,11 +53,9 @@ export class SmoobuClient {
     try {
       const response = await fetch(url.toString(), {
         method: "GET",
-        headers: {
-          "Api-Key": this.apiKey,
-          "User-Agent": `mcp-smoobu/${this.version}`,
+        headers: this.headers("GET", url, undefined, {
           Accept: "application/json",
-        },
+        }),
         signal: controller.signal,
       });
 
@@ -85,20 +88,27 @@ export class SmoobuClient {
     path: string,
     body?: Record<string, unknown>,
   ): Promise<T | NormalizedError> {
+    if (!this.allowWrites) {
+      return createError(
+        "WRITES_DISABLED",
+        403,
+        "Smoobu write operations are disabled. Set SMOOBU_ALLOW_WRITES=true only when you explicitly want to modify production data.",
+      );
+    }
+
     const url = new URL(path, this.baseUrl);
+    const bodyString = body ? JSON.stringify(body) : undefined;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
       const response = await fetch(url.toString(), {
         method,
-        headers: {
-          "Api-Key": this.apiKey,
-          "User-Agent": `mcp-smoobu/${this.version}`,
+        headers: this.headers(method, url, bodyString, {
           Accept: "application/json",
           ...(body ? { "Content-Type": "application/json" } : {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
+        }),
+        body: bodyString,
         signal: controller.signal,
       });
 
@@ -126,6 +136,68 @@ export class SmoobuClient {
       clearTimeout(timeout);
     }
   }
+
+  private headers(
+    method: string,
+    url: URL,
+    body: string | undefined,
+    extra: Record<string, string>,
+  ): Record<string, string> {
+    const common = {
+      "User-Agent": `mcp-smoobu/${this.version}`,
+      ...extra,
+    };
+
+    if (!this.apiSecret) {
+      return {
+        "Api-Key": this.apiKey,
+        ...common,
+      };
+    }
+
+    const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const nonce = randomUUID();
+    const signature = this.sign(method, url.pathname, canonicalQuery(url), timestamp, nonce, body ?? "");
+
+    return {
+      "X-API-Key": this.apiKey,
+      "X-Timestamp": timestamp,
+      "X-Nonce": nonce,
+      "X-Signature": signature,
+      ...common,
+    };
+  }
+
+  private sign(
+    method: string,
+    path: string,
+    query: string,
+    timestamp: string,
+    nonce: string,
+    body: string,
+  ): string {
+    const bodyHash = createHash("sha256").update(body).digest("hex");
+    const canonical = [
+      method.toUpperCase(),
+      path,
+      query,
+      timestamp,
+      nonce,
+      bodyHash,
+      this.apiKey,
+    ].join("\n");
+
+    return createHmac("sha256", this.apiSecret ?? "")
+      .update(canonical)
+      .digest("base64");
+  }
+}
+
+function canonicalQuery(url: URL): string {
+  return [...url.searchParams.entries()]
+    .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue))
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
 }
 
 /** Helper to check if a response is an error */

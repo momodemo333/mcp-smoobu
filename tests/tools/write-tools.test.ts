@@ -71,8 +71,8 @@ describe("sendReservationMessage", () => {
     });
     expect(mockClient.mutate).toHaveBeenCalledWith(
       "POST",
-      "/api/reservations/123/messages",
-      { subject: "Hello", body: "World" },
+      "/api/reservations/123/messages/send-message-to-guest",
+      { subject: "Hello", messageBody: "World" },
     );
   });
 });

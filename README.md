@@ -31,7 +31,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "npx",
       "args": ["-y", "mcp-smoobu"],
       "env": {
-        "SMOOBU_API_KEY": "your-api-key"
+        "SMOOBU_API_KEY": "your-api-key",
+        "SMOOBU_API_SECRET": "your-api-secret",
+        "SMOOBU_ALLOW_WRITES": "false"
       }
     }
   }
@@ -44,15 +46,35 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 claude mcp add smoobu -- npx -y mcp-smoobu
 ```
 
-Then set the environment variable:
+Then set the environment variables:
 
 ```bash
 export SMOOBU_API_KEY="your-api-key"
+export SMOOBU_API_SECRET="your-api-secret"
+# Safety default: write operations are blocked unless explicitly enabled.
+export SMOOBU_ALLOW_WRITES="false"
 ```
 
 ## Authentication
 
-Set the `SMOOBU_API_KEY` environment variable with your Smoobu API key. You can find it in your [Smoobu Settings](https://login.smoobu.com/en/settings/api).
+Smoobu HMAC authentication is supported via:
+
+- `SMOOBU_API_KEY` — API key
+- `SMOOBU_API_SECRET` — API secret used to sign each request
+
+If `SMOOBU_API_SECRET` is missing, the client falls back to the legacy `Api-Key` header for backward compatibility.
+
+## Write Safety
+
+Write operations are disabled by default to avoid accidental production changes. This includes creating/updating/cancelling reservations, sending guest messages, updating rates, guests, and price elements.
+
+To enable writes intentionally, set:
+
+```bash
+SMOOBU_ALLOW_WRITES=true
+```
+
+Keep it unset or set to `false` for read-only usage.
 
 ## Tools
 

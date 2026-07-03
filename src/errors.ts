@@ -4,6 +4,7 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "RATE_LIMIT"
   | "VALIDATION_ERROR"
+  | "WRITES_DISABLED"
   | "API_ERROR"
   | "TIMEOUT";
 
