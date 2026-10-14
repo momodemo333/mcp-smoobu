@@ -5,3 +5,5 @@ dist/
 .mcp.json
 _bmad/
 _bmad-output/
+
+.staging/

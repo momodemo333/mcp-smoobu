@@ -1,3 +1,6 @@
+import { validPage, invalidResponse } from "../response-validation.js";
+import { createError } from "../errors.js";
+import { createReservationSchema, updateReservationSchema } from "../write-schemas.js";
 import { isError, type SmoobuClient } from "../smoobu-client.js";
 import type {
   SmoobuPaginatedResponse,
@@ -10,6 +13,7 @@ import {
   validate,
   validateArrivalBeforeDeparture,
   validateDate,
+  validateDateRange,
   validateEmail,
   validateNonNegativeNumber,
   validatePageSize,
@@ -25,7 +29,7 @@ export const listReservationsTool = {
     "If no date filter is provided, defaults to arrivals from 30 days ago to 90 days ahead. " +
     "Use page and pageSize for pagination (max 100 per page). " +
     "Response includes totalItems to know the full count. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -54,7 +58,7 @@ export const getReservationTool = {
   description:
     "Get full details of a specific reservation by ID, including guest contact info, " +
     "prices, check-in/out times, and notices. Use list_reservations first to find reservation IDs. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -71,7 +75,7 @@ export const getReservationPriceElementsTool = {
   name: "get_reservation_price_elements",
   description:
     "Get the price breakdown of a reservation (accommodation, extras, taxes, etc.). " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -88,7 +92,7 @@ export const getReservationPlaceholdersTool = {
   name: "get_reservation_placeholders",
   description:
     "Get placeholder key-value pairs for a reservation (used in message templates). " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -142,13 +146,14 @@ function applyDefaultDateFilters(params: Record<string, unknown>): Record<string
   };
 }
 
-export async function listReservations(client: SmoobuClient, params: Record<string, unknown>) {
+export async function listReservations(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
   const dateFields = [
     "arrivalFrom", "arrivalTo", "departureFrom", "departureTo",
     "createdFrom", "createdTo", "modifiedFrom", "modifiedTo",
   ];
   const error = validate(
     ...dateFields.map((f) => validateDate(params[f], f)),
+    ...["arrival", "departure", "created", "modified"].map(prefix => params[prefix + "From"] && params[prefix + "To"] ? validateDateRange(params[prefix + "From"] as string, params[prefix + "To"] as string, Infinity) : null),
     validatePositiveInt(params.apartmentId, "apartmentId"),
     validatePositiveInt(params.page, "page"),
     validatePageSize(params.pageSize),
@@ -157,7 +162,7 @@ export async function listReservations(client: SmoobuClient, params: Record<stri
 
   const safeParams = applyDefaultDateFilters(params);
 
-  const apiParams: Record<string, string | number | boolean> = {};
+  const apiParams: Record<string, string | number | boolean> = { page: 1, pageSize: 25 };
   const paramMap: Record<string, string> = {
     arrivalFrom: "arrivalFrom",
     arrivalTo: "arrivalTo",
@@ -184,11 +189,12 @@ export async function listReservations(client: SmoobuClient, params: Record<stri
 
   const result = await client.request<SmoobuPaginatedResponse<SmoobuReservation>>(
     "/api/reservations",
-    apiParams,
+    apiParams, ...signal ? [signal] as [AbortSignal] : []
   );
 
   if (isError(result)) return result;
 
+  if (!validPage(result, "bookings")) return invalidResponse();
   const bookings = (result.bookings as SmoobuReservation[]) || [];
 
   return {
@@ -196,11 +202,11 @@ export async function listReservations(client: SmoobuClient, params: Record<stri
     page: result.page,
     pageSize: result.page_size,
     pageCount: result.page_count,
-    bookings: bookings.map(simplifyReservation),
+    bookings: bookings.map(r => ({ ...simplifyReservation(r), ...(params.includePriceElements ? { priceElements: (r as unknown as Record<string, unknown>).priceElements } : {}), ...(params.includeRelated ? { related: (r as unknown as Record<string, unknown>).related } : {}) })),
   };
 }
 
-export async function getReservation(client: SmoobuClient, params: Record<string, unknown>) {
+export async function getReservation(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
   const error = validate(
     validateRequired(params, ["reservationId"]),
     validatePositiveInt(params.reservationId, "reservationId"),
@@ -208,7 +214,7 @@ export async function getReservation(client: SmoobuClient, params: Record<string
   if (error) return error;
 
   const result = await client.request<SmoobuReservation>(
-    `/api/reservations/${params.reservationId}`,
+    `/api/reservations/${params.reservationId}`, ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]
   );
 
   if (isError(result)) return result;
@@ -245,7 +251,7 @@ export async function getReservation(client: SmoobuClient, params: Record<string
 
 export async function getReservationPriceElements(
   client: SmoobuClient,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>, signal?: AbortSignal
 ) {
   const error = validate(
     validateRequired(params, ["reservationId"]),
@@ -254,13 +260,13 @@ export async function getReservationPriceElements(
   if (error) return error;
 
   return client.request<SmoobuPriceElement[]>(
-    `/api/reservations/${params.reservationId}/price-elements`,
+    `/api/reservations/${params.reservationId}/price-elements`, ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]
   );
 }
 
 export async function getReservationPlaceholders(
   client: SmoobuClient,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>, signal?: AbortSignal
 ) {
   const error = validate(
     validateRequired(params, ["reservationId"]),
@@ -269,108 +275,25 @@ export async function getReservationPlaceholders(
   if (error) return error;
 
   return client.request<SmoobuPlaceholder[]>(
-    `/api/reservations/${params.reservationId}/placeholders`,
+    `/api/reservations/${params.reservationId}/placeholders`, ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]
   );
 }
 
-export async function createReservation(
-  client: SmoobuClient,
-  params: Record<string, unknown>,
-) {
-  const error = validate(
-    validateRequired(params, ["arrivalDate", "departureDate", "apartmentId"]),
-    validateDate(params.arrivalDate, "arrivalDate"),
-    validateDate(params.departureDate, "departureDate"),
-    validatePositiveInt(params.apartmentId, "apartmentId"),
-    params.arrivalDate && params.departureDate
-      ? validateArrivalBeforeDeparture(
-          params.arrivalDate as string,
-          params.departureDate as string,
-        )
-      : null,
-    params.email !== undefined ? validateEmail(params.email, "email") : null,
-    params.arrivalTime !== undefined ? validateTimeFormat(params.arrivalTime, "arrivalTime") : null,
-    params.departureTime !== undefined ? validateTimeFormat(params.departureTime, "departureTime") : null,
-    params.price !== undefined ? validateNonNegativeNumber(params.price, "price") : null,
-    params.prepayment !== undefined ? validateNonNegativeNumber(params.prepayment, "prepayment") : null,
-    params.deposit !== undefined ? validateNonNegativeNumber(params.deposit, "deposit") : null,
-  );
-  if (error) return error;
-
-  const payload: Record<string, unknown> = {
-    arrivalDate: params.arrivalDate,
-    departureDate: params.departureDate,
-    apartmentId: Number(params.apartmentId),
-    channelId: params.channelId !== undefined ? Number(params.channelId) : 70,
-  };
-
-  const optionalFields = [
-    "arrivalTime", "departureTime", "firstName", "lastName",
-    "email", "phone", "notice", "adults", "children",
-    "price", "priceStatus", "prepayment", "prepaymentStatus",
-    "deposit", "depositStatus", "language", "address",
-  ];
-  for (const field of optionalFields) {
-    if (params[field] !== undefined) {
-      payload[field] = params[field];
-    }
-  }
-
-  return client.mutate<SmoobuReservation>("POST", "/api/reservations", payload);
+export async function createReservation(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
+  const parsed = createReservationSchema.safeParse(params);
+  if (!parsed.success) return createError("VALIDATION_ERROR", 400, "Invalid create_reservation parameters: " + parsed.error.issues.map(i => i.path.join(".") + ": " + i.message).join("; "));
+  return client.mutate<{ id: number }>("POST", "/api/reservations", { ...parsed.data, channelId: parsed.data.channelId ?? 70 }, ...signal ? [signal] as [AbortSignal] : []);
 }
-
-export async function updateReservation(
-  client: SmoobuClient,
-  params: Record<string, unknown>,
-) {
-  const error = validate(
-    validateRequired(params, ["reservationId"]),
-    validatePositiveInt(params.reservationId, "reservationId"),
-    params.arrivalDate !== undefined ? validateDate(params.arrivalDate, "arrivalDate") : null,
-    params.departureDate !== undefined ? validateDate(params.departureDate, "departureDate") : null,
-    params.arrivalDate && params.departureDate
-      ? validateArrivalBeforeDeparture(
-          params.arrivalDate as string,
-          params.departureDate as string,
-        )
-      : null,
-    params.email !== undefined ? validateEmail(params.email, "email") : null,
-    params.arrivalTime !== undefined ? validateTimeFormat(params.arrivalTime, "arrivalTime") : null,
-    params.departureTime !== undefined ? validateTimeFormat(params.departureTime, "departureTime") : null,
-    params.price !== undefined ? validateNonNegativeNumber(params.price, "price") : null,
-    params.prepayment !== undefined ? validateNonNegativeNumber(params.prepayment, "prepayment") : null,
-    params.deposit !== undefined ? validateNonNegativeNumber(params.deposit, "deposit") : null,
-  );
-  if (error) return error;
-
-  const payload: Record<string, unknown> = {};
-  const modifiableFields = [
-    "arrivalDate", "departureDate", "arrivalTime", "departureTime",
-    "firstName", "lastName", "email", "phone", "notice",
-    "adults", "children", "price", "priceStatus",
-    "prepayment", "prepaymentStatus", "deposit", "depositStatus",
-    "language", "channelId", "apartmentId", "address",
-  ];
-  for (const field of modifiableFields) {
-    if (params[field] !== undefined) {
-      payload[field] = params[field];
-    }
-  }
-
-  if (Object.keys(payload).length === 0) {
-    return validate(validateRequired({}, ["at least one field to update"]));
-  }
-
-  return client.mutate<SmoobuReservation>(
-    "PUT",
-    `/api/reservations/${params.reservationId}`,
-    payload,
-  );
+export async function updateReservation(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
+  const parsed = updateReservationSchema.safeParse(params);
+  if (!parsed.success) return createError("VALIDATION_ERROR", 400, "Only documented update fields supported (guestName/guestEmail/guestPhone, not firstName/email). Dates, apartment/channel and address changes are not documented. " + parsed.error.issues.map(i => i.path.join(".") + ": " + i.message).join("; "));
+  const { reservationId, ...payload } = parsed.data;
+  return client.mutate<Record<string, unknown>>("PUT", "/api/reservations/" + reservationId, payload, ...signal ? [signal] as [AbortSignal] : []);
 }
 
 export async function cancelReservation(
   client: SmoobuClient,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>, signal?: AbortSignal
 ) {
   const error = validate(
     validateRequired(params, ["reservationId"]),
@@ -380,6 +303,6 @@ export async function cancelReservation(
 
   return client.mutate<Record<string, unknown>>(
     "DELETE",
-    `/api/reservations/${params.reservationId}`,
+    `/api/reservations/${params.reservationId}`, ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]
   );
 }

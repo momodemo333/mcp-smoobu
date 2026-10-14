@@ -127,8 +127,9 @@ export interface SmoobuMessage {
   id: number;
   subject: string;
   message: string;
-  messageHtml: string;
-  type: string;
+  messageHtml?: string;
+  htmlMessage?: string;
+  type: number;
 }
 
 export interface SmoobuThread {
@@ -144,8 +145,8 @@ export interface SmoobuThread {
 }
 
 export interface SmoobuRateDay {
-  price: number;
-  min_length_of_stay: number;
+  price: number | null;
+  min_length_of_stay: number | null;
   available: number;
 }
 
@@ -228,3 +229,5 @@ export interface SimplifiedCheckIn {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface SmoobuRatesResponse { data: Record<string, Record<string, SmoobuRateDay>>; }

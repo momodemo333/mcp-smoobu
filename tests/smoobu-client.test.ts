@@ -15,10 +15,7 @@ describe("SmoobuClient", () => {
     vi.stubEnv("SMOOBU_API_KEY", "usr_live_test");
     vi.stubEnv("SMOOBU_API_SECRET", "secret_test");
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true }),
-    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new SmoobuClient();

@@ -23,8 +23,8 @@ export function validatePositiveInt(
   name: string,
 ): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  const num = Number(value);
-  if (!Number.isInteger(num) || num < 1) {
+  const num = value;
+  if (typeof num !== "number" || !Number.isSafeInteger(num) || num < 1) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -39,7 +39,7 @@ export function validateDate(
   name: string,
 ): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !DATE_REGEX.test(value)) {
+  if (typeof value !== "string" || !DATE_REGEX.test(value) || !isCalendarDate(value)) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -51,8 +51,8 @@ export function validateDate(
 
 export function validatePageSize(value: unknown): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  const num = Number(value);
-  if (!Number.isInteger(num) || num < 1 || num > 100) {
+  const num = value;
+  if (typeof num !== "number" || !Number.isSafeInteger(num) || num < 1 || num > 100) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -67,6 +67,8 @@ export function validateDateRange(
   endDate: string,
   maxDays: number,
 ): NormalizedError | null {
+  const invalid = validateDate(startDate, "startDate") || validateDate(endDate, "endDate");
+  if (invalid) return invalid;
   const start = new Date(startDate);
   const end = new Date(endDate);
   if (end < start) {
@@ -100,8 +102,8 @@ export function validateNumberArray(
     );
   }
   for (const item of value) {
-    const num = Number(item);
-    if (!Number.isInteger(num) || num < 1) {
+    const num = item;
+    if (typeof num !== "number" || !Number.isSafeInteger(num) || num < 1) {
       return createError(
         "VALIDATION_ERROR",
         400,
@@ -117,7 +119,7 @@ export function validateFutureDate(
   name: string,
 ): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !DATE_REGEX.test(value)) {
+  if (typeof value !== "string" || !DATE_REGEX.test(value) || !isCalendarDate(value)) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -141,6 +143,8 @@ export function validateArrivalBeforeDeparture(
   arrival: string,
   departure: string,
 ): NormalizedError | null {
+  const invalid = validateDate(arrival, "arrivalDate") || validateDate(departure, "departureDate");
+  if (invalid) return invalid;
   const a = new Date(arrival);
   const d = new Date(departure);
   if (d <= a) {
@@ -173,7 +177,7 @@ export function validateTimeFormat(
   name: string,
 ): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) {
+  if (typeof value !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -204,8 +208,8 @@ export function validateNonNegativeNumber(
   name: string,
 ): NormalizedError | null {
   if (value === undefined || value === null) return null;
-  const num = Number(value);
-  if (isNaN(num) || num < 0) {
+  const num = value;
+  if (typeof num !== "number" || !Number.isFinite(num) || num < 0) {
     return createError(
       "VALIDATION_ERROR",
       400,
@@ -223,4 +227,9 @@ export function validate(
     if (result) return result;
   }
   return null;
+}
+
+function isCalendarDate(value: string): boolean {
+  const date = new Date(value + "T00:00:00Z");
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }

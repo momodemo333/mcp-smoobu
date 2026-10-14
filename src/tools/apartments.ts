@@ -7,7 +7,7 @@ export const listApartmentsTool = {
   description:
     "List all properties (apartments, houses, rooms) in the Smoobu account. " +
     "Returns ID and name for each property. Use get_apartment for full details. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {},
@@ -20,7 +20,7 @@ export const getApartmentTool = {
   description:
     "Get full details of a specific property by ID, including location, rooms, amenities, " +
     "currency, price range, and property type. Use list_apartments first to find property IDs. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -33,17 +33,17 @@ export const getApartmentTool = {
   },
 };
 
-export async function listApartments(client: SmoobuClient) {
-  const result = await client.request<{ apartments: SmoobuApartmentListItem[] }>("/api/apartments");
+export async function listApartments(client: SmoobuClient, signal?: AbortSignal) {
+  const result = await client.request<{ apartments: SmoobuApartmentListItem[] }>("/api/apartments", ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]);
   return result;
 }
 
-export async function getApartment(client: SmoobuClient, params: Record<string, unknown>) {
+export async function getApartment(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
   const error = validate(
     validateRequired(params, ["apartmentId"]),
     validatePositiveInt(params.apartmentId, "apartmentId"),
   );
   if (error) return error;
 
-  return client.request<SmoobuApartment>(`/api/apartments/${params.apartmentId}`);
+  return client.request<SmoobuApartment>(`/api/apartments/${params.apartmentId}`, ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]);
 }

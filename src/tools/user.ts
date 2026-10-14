@@ -6,7 +6,7 @@ export const getUserTool = {
   description:
     "Get the current Smoobu user profile (name, email). " +
     "Use this to verify the API connection or identify the account owner. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {},
@@ -14,6 +14,6 @@ export const getUserTool = {
   },
 };
 
-export async function getUser(client: SmoobuClient) {
-  return client.request<SmoobuUser>("/api/me");
+export async function getUser(client: SmoobuClient, signal?: AbortSignal) {
+  return client.request<SmoobuUser>("/api/me", ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]);
 }

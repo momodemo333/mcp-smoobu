@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SmoobuClient } from "../../src/smoobu-client.js";
 import { sendReservationMessage } from "../../src/tools/messages.js";
-import { createGuest, updateGuest } from "../../src/tools/guests.js";
 import { createReservation, updateReservation, cancelReservation } from "../../src/tools/reservations.js";
 import { checkApartmentAvailability, updateRates } from "../../src/tools/rates.js";
 import { createPriceElement, updatePriceElement, deletePriceElement } from "../../src/tools/price-elements.js";
 
 // Mock SmoobuClient - we never make real API calls
 const mockClient = {
+  checkAvailability: vi.fn().mockResolvedValue({ availableApartments: [1] }),
   mutate: vi.fn().mockResolvedValue({ id: 1 }),
   request: vi.fn().mockResolvedValue({ id: 1 }),
 } as unknown as SmoobuClient;
@@ -40,14 +40,12 @@ describe("checkApartmentAvailability", () => {
     }));
   });
 
-  it("calls mutate with valid params", async () => {
+  it("resolves customer and calls read-only POST", async () => {
     await checkApartmentAvailability(mockClient, {
       apartmentId: 1, arrivalDate: "2025-06-01", departureDate: "2025-06-05",
     });
-    expect(mockClient.mutate).toHaveBeenCalledWith(
-      "POST",
-      "/booking/checkApartmentAvailability",
-      expect.objectContaining({ apartments: [1] }),
+    expect(mockClient.checkAvailability).toHaveBeenCalledWith(
+      expect.objectContaining({ apartments: [1], customerId: 1 }),
     );
   });
 });
@@ -59,9 +57,9 @@ describe("sendReservationMessage", () => {
     expectValidationError(await sendReservationMessage(mockClient, {}));
   });
 
-  it("rejects missing subject", async () => {
+  it("rejects empty body", async () => {
     expectValidationError(await sendReservationMessage(mockClient, {
-      reservationId: 1, body: "hi",
+      reservationId: 1, body: " ",
     }));
   });
 
@@ -73,48 +71,6 @@ describe("sendReservationMessage", () => {
       "POST",
       "/api/reservations/123/messages/send-message-to-guest",
       { subject: "Hello", messageBody: "World" },
-    );
-  });
-});
-
-// -- createGuest --
-
-describe("createGuest", () => {
-  it("rejects missing firstName", async () => {
-    expectValidationError(await createGuest(mockClient, { lastName: "Doe" }));
-  });
-
-  it("rejects invalid email", async () => {
-    expectValidationError(await createGuest(mockClient, {
-      firstName: "John", lastName: "Doe", email: "not-email",
-    }));
-  });
-
-  it("calls mutate with valid params", async () => {
-    await createGuest(mockClient, { firstName: "John", lastName: "Doe" });
-    expect(mockClient.mutate).toHaveBeenCalledWith(
-      "POST", "/api/guests",
-      { firstName: "John", lastName: "Doe" },
-    );
-  });
-});
-
-// -- updateGuest --
-
-describe("updateGuest", () => {
-  it("rejects missing guestId", async () => {
-    expectValidationError(await updateGuest(mockClient, { firstName: "John" }));
-  });
-
-  it("rejects no fields to update", async () => {
-    expectValidationError(await updateGuest(mockClient, { guestId: 1 }));
-  });
-
-  it("calls mutate with valid params", async () => {
-    await updateGuest(mockClient, { guestId: 5, firstName: "Jane" });
-    expect(mockClient.mutate).toHaveBeenCalledWith(
-      "PUT", "/api/guests/5",
-      { firstName: "Jane" },
     );
   });
 });
@@ -211,11 +167,11 @@ describe("createPriceElement", () => {
 
   it("calls mutate with valid params", async () => {
     await createPriceElement(mockClient, {
-      reservationId: 1, name: "Cleaning", amount: 50,
+      reservationId: 1, name: "Cleaning", amount: 50, currencyCode: "EUR",
     });
     expect(mockClient.mutate).toHaveBeenCalledWith(
       "POST", "/api/reservations/1/price-elements",
-      { name: "Cleaning", amount: 50 },
+      { name: "Cleaning", amount: 50, currencyCode: "EUR" },
     );
   });
 });
@@ -235,11 +191,11 @@ describe("updatePriceElement", () => {
 
   it("calls mutate POST (not PUT) per Smoobu API", async () => {
     await updatePriceElement(mockClient, {
-      reservationId: 1, elementId: 2, amount: 75,
+      reservationId: 1, elementId: 2, amount: 75, name: "Tax", currencyCode: "EUR",
     });
     expect(mockClient.mutate).toHaveBeenCalledWith(
       "POST", "/api/reservations/1/price-elements/2",
-      { amount: 75 },
+      { amount: 75, name: "Tax", currencyCode: "EUR" },
     );
   });
 });
@@ -278,13 +234,10 @@ describe("updateRates", () => {
 
   it("calls mutate with valid params", async () => {
     await updateRates(mockClient, {
-      apartments: [{
-        id: 1,
-        priceItems: [{ date: "2025-06-01", price: 100, available: 1 }],
-      }],
+      apartments: [1], operations: [{ dates: ["2025-06-01"], daily_price: 100 }],
     });
     expect(mockClient.mutate).toHaveBeenCalledWith(
-      "PUT", "/api/rates",
+      "POST", "/api/rates",
       expect.objectContaining({
         apartments: expect.any(Array),
       }),

@@ -7,7 +7,7 @@ export const listAddonsTool = {
   description:
     "List available service add-ons (extras, fees, services). " +
     "Optionally filter by apartment ID. Returns name, amount, tax, and configuration. " +
-    "Smoobu API rate limit: 1000 requests/minute.",
+    "Smoobu API rate limit: 700 requests/minute.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -20,14 +20,11 @@ export const listAddonsTool = {
   },
 };
 
-export async function listAddons(client: SmoobuClient, params: Record<string, unknown>) {
+export async function listAddons(client: SmoobuClient, params: Record<string, unknown>, signal?: AbortSignal) {
   const error = validate(
     validatePositiveInt(params.apartmentId, "apartmentId"),
   );
   if (error) return error;
 
-  const apiParams: Record<string, number> = {};
-  if (params.apartmentId) apiParams.apartmentId = Number(params.apartmentId);
-
-  return client.request<SmoobuAddon[]>("/api/addons", apiParams);
+  return client.request<{ addons: SmoobuAddon[] }>(params.apartmentId ? "/api/addons/" + params.apartmentId : "/api/addons", ...signal ? [undefined, signal] as [undefined, AbortSignal] : [] as [undefined?, AbortSignal?]);
 }
